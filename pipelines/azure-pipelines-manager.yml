@@ -1,0 +1,51 @@
+trigger:
+  branches:
+    include: [ main, release/* ]
+
+variables:
+  imageName: '$(ACR_NAME)/manager-service'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        packageType: 'sdk'
+        version: '8.x'
+    - script: |
+        cd backend/src/ManagerService.API
+        dotnet restore
+        dotnet build --configuration Release
+      displayName: 'dotnet restore & build'
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'ACR_CONNECTION'
+        repository: $(imageName)
+        command: buildAndPush
+        dockerfile: 'backend/src/ManagerService.API/Dockerfile'
+        tags: |
+          $(Build.BuildId)
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - deployment: DeployToAKS
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'aks-prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Kubernetes@1
+            displayName: 'kubectl apply'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceConnection: 'KUBE_SERVICE_CONN'
+              namespace: default
+              command: apply
+              useConfigurationFile: true
+              configuration: 'k8s/manager-deployment.yaml'

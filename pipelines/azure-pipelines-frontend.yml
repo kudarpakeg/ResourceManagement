@@ -1,0 +1,47 @@
+trigger:
+  branches:
+    include: [ main, release/* ]
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '20.x'
+    - script: |
+        cd frontend
+        npm ci
+        npm run build --if-present
+      displayName: 'npm install & build frontend'
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'ACR_CONNECTION'
+        repository: '$(ACR_NAME)/rms-frontend'
+        command: buildAndPush
+        dockerfile: 'frontend/Dockerfile'
+        tags: |
+          $(Build.BuildId)
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - deployment: DeployToAKS
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'aks-prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Kubernetes@1
+            displayName: 'kubectl apply'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceConnection: 'KUBE_SERVICE_CONN'
+              namespace: default
+              command: apply
+              useConfigurationFile: true
+              configuration: 'k8s/frontend-deployment.yaml'
