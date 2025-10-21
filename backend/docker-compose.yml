@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  employee:
+    build: ./src/EmployeeService.API
+    ports:
+      - "5101:80"
+  manager:
+    build: ./src/ManagerService.API
+    ports:
+      - "5201:80"
